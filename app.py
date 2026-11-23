@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import re
 from typing import Any
@@ -83,6 +84,17 @@ def generate_speech_bytes(text: str, preferred_voice: str) -> bytes | None:
         return None
 
 
+def play_hidden_audio(audio_bytes: bytes) -> None:
+    """Autoplay MP3 audio in the background without showing an audio player bar."""
+    b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    st.markdown(
+        f'<audio autoplay="true" style="display:none;">'
+        f'<source src="data:audio/mp3;base64,{b64}" type="audio/mp3">'
+        f"</audio>",
+        unsafe_allow_html=True,
+    )
+
+
 def load_settings() -> Settings:
     """Load settings from Streamlit Cloud secrets or local .env."""
     try:
@@ -161,27 +173,10 @@ def main() -> None:
 
         st.divider()
 
-        persona_input = st.text_area(
-            "System Persona",
-            value=bot.system_instruction,
-            height=120,
-        )
-        if st.button("Update Persona", use_container_width=True):
-            if persona_input.strip():
-                bot.set_system_instruction(persona_input)
-                st.success("Persona updated.")
-            else:
-                st.warning("System persona cannot be empty.")
-
         if st.button("Clear Chat", type="secondary", use_container_width=True):
             bot.clear_history()
             st.session_state.ui_messages = []
             st.rerun()
-
-        st.divider()
-        st.markdown(
-            "**Tip:** Type `/image <description>` in the chat box to generate an image."
-        )
 
     # --- Main Chat Interface ---
     st.header(BOT_NAME)
@@ -191,7 +186,11 @@ def main() -> None:
             if msg.get("text"):
                 st.markdown(msg["text"])
             if msg.get("image"):
-                st.image(msg["image"], caption=msg.get("caption", ""), use_container_width=True)
+                st.image(
+                    msg["image"],
+                    caption=msg.get("caption", ""),
+                    use_container_width=True,
+                )
                 st.download_button(
                     label="Download Image",
                     data=msg["image"],
@@ -199,10 +198,8 @@ def main() -> None:
                     mime="image/png",
                     key=f"dl_{idx}",
                 )
-            if msg.get("audio"):
-                st.audio(msg["audio"], format="audio/mp3")
 
-    prompt = st.chat_input(f"Ask {BOT_NAME} anything, or type /image <prompt>...")
+    prompt = st.chat_input(f"Ask {BOT_NAME} anything...")
     if not prompt:
         return
 
@@ -243,17 +240,15 @@ def main() -> None:
     with st.chat_message("assistant"):
         try:
             full_reply = st.write_stream(bot.stream_reply(prompt))
-            audio_bytes: bytes | None = None
             if isinstance(full_reply, str) and full_reply.strip() and auto_speak:
                 audio_bytes = generate_speech_bytes(full_reply, preferred_voice)
                 if audio_bytes:
-                    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+                    play_hidden_audio(audio_bytes)
 
             st.session_state.ui_messages.append(
                 {
                     "role": "assistant",
                     "text": str(full_reply),
-                    "audio": audio_bytes,
                 }
             )
         except (RateLimitError, NetworkTimeoutError, ChatbotError) as exc:
