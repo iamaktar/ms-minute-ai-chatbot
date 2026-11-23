@@ -22,12 +22,27 @@ AVAILABLE_MODELS: list[str] = [
     "gemini-2.5-flash",
 ]
 
-VOICE_OPTIONS: dict[str, str] = {
-    "English (India) - Neerja": "en-IN-NeerjaNeural",
-    "English (US) - Aria": "en-US-AriaNeural",
-    "English (UK) - Sonia": "en-GB-SoniaNeural",
-    "Bengali (India) - Tanishaa": "bn-IN-TanishaaNeural",
-    "Hindi (India) - Swara": "hi-IN-SwaraNeural",
+VOICE_OPTIONS: dict[str, tuple[str, str]] = {
+    "English (India) - Neerja": (
+        "en-IN-NeerjaNeural",
+        "Hello! I am Ms. Minute, and my voice is working.",
+    ),
+    "English (US) - Aria": (
+        "en-US-AriaNeural",
+        "Hello! I am Ms. Minute, ready to help you.",
+    ),
+    "English (UK) - Sonia": (
+        "en-GB-SoniaNeural",
+        "Hello! I am Ms. Minute, at your service.",
+    ),
+    "Bengali (India) - Tanishaa": (
+        "bn-IN-TanishaaNeural",
+        "নমস্কার! আমি মিস মিনিট, এখন আমি বাংলায় কথা বলতে পারি।",
+    ),
+    "Hindi (India) - Swara": (
+        "hi-IN-SwaraNeural",
+        "नमस्ते! मैं मिस मिनट हूँ, और अब मैं हिंदी में बात कर सकती हूँ।",
+    ),
 }
 
 BENGALI_VOICE = "bn-IN-TanishaaNeural"
@@ -72,12 +87,20 @@ async def _synthesize_mp3_bytes(text: str, voice: str) -> bytes:
     return b"".join(chunks)
 
 
-def generate_speech_bytes(text: str, preferred_voice: str) -> bytes | None:
+def generate_speech_bytes(
+    text: str,
+    preferred_voice: str,
+    auto_detect: bool = True,
+) -> bytes | None:
     """Return MP3 audio bytes for the given text, or None if synthesis fails."""
     spoken_text = clean_text_for_speech(text)
     if not spoken_text:
         return None
-    selected_voice = detect_tts_voice(spoken_text, preferred_voice)
+    selected_voice = (
+        detect_tts_voice(spoken_text, preferred_voice)
+        if auto_detect
+        else preferred_voice
+    )
     try:
         return asyncio.run(_synthesize_mp3_bytes(spoken_text, selected_voice))
     except Exception:  # noqa: BLE001
@@ -167,7 +190,16 @@ def main() -> None:
             options=list(VOICE_OPTIONS.keys()),
             index=0,
         )
-        preferred_voice = VOICE_OPTIONS[selected_voice_label]
+        preferred_voice, sample_text = VOICE_OPTIONS[selected_voice_label]
+
+        if st.button("🔊 Test Voice", use_container_width=True):
+            audio_bytes = generate_speech_bytes(
+                sample_text, preferred_voice, auto_detect=False
+            )
+            if audio_bytes:
+                play_hidden_audio(audio_bytes)
+            else:
+                st.warning("Could not play voice sample.")
 
         auto_speak = st.toggle("Auto-Speak Replies", value=True)
 
